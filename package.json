@@ -1,0 +1,33 @@
+{
+  "name": "wow-grok",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Talk to local Grok sessions from inside World of Warcraft. Pixel strip out, load-on-demand slots in.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hydrolive/wow-grok.git"
+  },
+  "keywords": [
+    "world-of-warcraft",
+    "wow-addon",
+    "grok",
+    "wowgrok"
+  ],
+  "engines": {
+    "node": ">=22.2"
+  },
+  "bin": {
+    "wow-grok": "bridge/index.js"
+  },
+  "main": "bridge/index.js",
+  "scripts": {
+    "setup": "node setup.js",
+    "start": "node bridge/index.js",
+    "slots": "node bridge/install-slots.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "devDependencies": {
+    "fengari": "^0.1.4"
+  }
+}

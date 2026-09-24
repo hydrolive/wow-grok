@@ -1,0 +1,17 @@
+# machine-specific companion state
+bridge/config.json
+bridge/state.json
+bridge/transcripts.json
+bridge/companion.log
+bridge/companion.lock
+bridge/prompt-*.txt
+
+# tooling and test leftovers
+node_modules/
+tests/tmp/
+*.tmp
+
+# OS
+.DS_Store
+Thumbs.db
+*.zip

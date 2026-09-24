@@ -1,0 +1,2 @@
+-- Published by the WowGrok companion. /reload reads this copy.
+-- Between reloads the same WowGrok_SlotData is loaded from WowGrok_S001..S200.

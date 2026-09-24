@@ -1,0 +1,13 @@
+## Interface: 16001
+## Title: WowGrok
+## Notes: Talk to Grok from inside World of Warcraft. Requires the local companion.
+## Version: 0.1.0
+## SavedVariables: WowGrokDB
+
+bindings.xml
+Codec.lua
+Context.lua
+WowGrok.lua
+UI.lua
+Slash.lua
+Inbox.lua
