@@ -2,12 +2,24 @@
 
 local G = WowGrok
 
-local function font(fs, size, r, g, b)
+local function font(fs, size, r, g, b, wrap)
   if not fs then return end
   pcall(function() fs:SetFont("Fonts\\FRIZQT__.TTF", size or 12, "") end)
   if fs.SetTextColor then fs:SetTextColor(r or 0.92, g or 0.91, b or 0.86, 1) end
   if fs.SetJustifyH then fs:SetJustifyH("LEFT") end
-  if fs.SetWordWrap then fs:SetWordWrap(true) end
+  if wrap == nil then wrap = true end
+  if fs.SetWordWrap then fs:SetWordWrap(wrap) end
+  if wrap == false and fs.SetMaxLines then pcall(fs.SetMaxLines, fs, 1) end
+end
+
+local function clip(frame)
+  if frame and frame.SetClipsChildren then pcall(frame.SetClipsChildren, frame, true) end
+end
+
+local function shorten(text, limit)
+  text = tostring(text or "")
+  if #text <= limit then return text end
+  return text:sub(1, limit - 3) .. "..."
 end
 
 local function paint(frame, r, g, b, a)
@@ -45,8 +57,17 @@ main:SetSize(680, 480)
 main:SetPoint("CENTER")
 main:SetFrameStrata("DIALOG")
 main:SetMovable(true)
+main:SetResizable(true)
 main:EnableMouse(true)
 main:SetClampedToScreen(true)
+if main.SetResizeBounds then
+  main:SetResizeBounds(560, 340, 1200, 900)
+else
+  pcall(function()
+    main:SetMinResize(560, 340)
+    main:SetMaxResize(1200, 900)
+  end)
+end
 paint(main, 0.06, 0.06, 0.08, 0.96)
 G.main = main
 UISpecialFrames = UISpecialFrames or {}
@@ -92,10 +113,18 @@ newBtn:SetScript("OnClick", function() G.NewChat("") end)
 
 local listScroll = CreateFrame("ScrollFrame", nil, main)
 listScroll:SetPoint("TOPLEFT", 8, -62)
-listScroll:SetSize(160, 334)
+listScroll:SetPoint("BOTTOMLEFT", 8, 12)
+listScroll:SetWidth(168)
+clip(listScroll)
 local list = CreateFrame("Frame", nil, listScroll)
-list:SetSize(160, 360)
+list:SetSize(168, 200)
 listScroll:SetScrollChild(list)
+listScroll:EnableMouseWheel(true)
+listScroll:SetScript("OnMouseWheel", function(self, delta)
+  local cur = self:GetVerticalScroll() or 0
+  local maxScroll = math.max(0, (list:GetHeight() or 0) - (self:GetHeight() or 0))
+  self:SetVerticalScroll(math.min(maxScroll, math.max(0, cur - (delta or 0) * 28)))
+end)
 G.list = list
 G.listScroll = listScroll
 
@@ -147,10 +176,39 @@ end)
 G._editLive = true
 
 local send = button(main, "Connect", 90, 36)
-send:SetPoint("BOTTOMRIGHT", -10, 12)
+send:SetPoint("BOTTOMRIGHT", -22, 12)
 G.sendButton = send
 send:RegisterForClicks("AnyUp")
 send:SetScript("OnClick", function() G.SubmitBox() end)
+
+local grip = CreateFrame("Button", nil, main)
+grip:SetSize(18, 18)
+grip:SetPoint("BOTTOMRIGHT", -1, 1)
+grip:SetFrameLevel((main:GetFrameLevel() or 1) + 20)
+grip:EnableMouse(true)
+grip:RegisterForDrag("LeftButton")
+local function gripLine(w, x, y)
+  local tex = grip:CreateTexture(nil, "OVERLAY")
+  tex:SetSize(w, 2)
+  tex:SetPoint("BOTTOMRIGHT", x, y)
+  tex:SetColorTexture(0.62, 0.66, 0.7, 0.95)
+end
+gripLine(12, -3, 4)
+gripLine(8, -3, 8)
+gripLine(4, -3, 12)
+grip:SetScript("OnDragStart", function() main:StartSizing("BOTTOMRIGHT") end)
+grip:SetScript("OnDragStop", function()
+  main:StopMovingOrSizing()
+  if WowGrokDB then
+    WowGrokDB.width = math.floor((main:GetWidth() or 680) + 0.5)
+    WowGrokDB.height = math.floor((main:GetHeight() or 480) + 0.5)
+  end
+  if G.Refresh then G.Refresh() end
+end)
+main:SetScript("OnSizeChanged", function()
+  if G._applyingSize or not G.Refresh then return end
+  G.Refresh()
+end)
 
 function G.SubmitBox()
   local text = edit:GetText() or ""
@@ -307,16 +365,20 @@ local function takeRow(i)
   local row = rows[i]
   if row then return row end
   row = CreateFrame("Button", nil, list)
-  row:SetSize(152, 36)
+  row:SetSize(160, 28)
+  clip(row)
   paint(row, 0.12, 0.12, 0.15, 1)
   local label = row:CreateFontString(nil, "OVERLAY")
-  font(label, 12, 0.9, 0.9, 0.86)
-  label:SetPoint("TOPLEFT", 6, -4)
-  label:SetWidth(110)
+  font(label, 11, 0.9, 0.9, 0.86, false)
+  label:SetPoint("LEFT", 6, 0)
+  label:SetPoint("RIGHT", -22, 0)
+  label:SetHeight(14)
   row.label = label
   local status = row:CreateFontString(nil, "OVERLAY")
-  font(status, 10, 0.93, 0.78, 0.35)
-  status:SetPoint("BOTTOMLEFT", 6, 4)
+  font(status, 10, 0.93, 0.78, 0.35, false)
+  status:SetPoint("BOTTOMLEFT", 6, 2)
+  status:SetHeight(11)
+  status:Hide()
   row.status = status
   row:RegisterForClicks("AnyUp")
   row:SetScript("OnClick", function(self, button)
@@ -375,13 +437,14 @@ local function placeMessages(chat)
     items[#items + 1] = { role = "grok", text = working, t = chat.waitingSince or time(), pending = true }
   end
   local y = -4
-  local width = 470
+  local width = math.max(160, (logScroll:GetWidth() or 480) - 12)
   for i, msg in ipairs(items) do
     local bubble = takeBubble(i)
     local role = msg.role or "grok"
     local who = role == "you" and "You" or (role == "system" and "WowGrok" or "Grok")
     local stamp = ""
     if msg.t and date then stamp = "  " .. date("%H:%M", msg.t) end
+    bubble:SetWidth(width)
     bubble.who:SetText(who .. stamp .. (msg.pending and "  ..." or ""))
     local body = msg.text or ""
     if #body > 8000 then body = body:sub(1, 8000) .. "..." end
@@ -423,12 +486,20 @@ function G.Refresh()
     row.chatId = rowChat.id
     local badge = (rowChat.unread or 0) > 0 and (" (" .. rowChat.unread .. ")") or ""
     local mark = tostring(rowChat.id) == tostring(WowGrokDB.active) and "> " or ""
-    row.label:SetText(mark .. (rowChat.name or "Chat") .. badge)
+    row.label:SetText(shorten(mark .. (rowChat.name or "Chat") .. badge, 22))
+    if row.label.ClearAllPoints then row.label:ClearAllPoints() end
+    row.label:SetPoint("LEFT", row, "LEFT", 6, rowChat.working and 5 or 0)
+    row.label:SetPoint("RIGHT", row, "RIGHT", -22, rowChat.working and 5 or 0)
     if row.status then
-      if rowChat.working then row.status:SetText("Working") else row.status:SetText("") end
+      if rowChat.working then
+        row.status:SetText("Working")
+        row.status:Show()
+      else
+        row.status:Hide()
+      end
     end
     if row.ClearAllPoints then row:ClearAllPoints() end
-    row:SetPoint("TOPLEFT", 0, -((i - 1) * 38))
+    row:SetPoint("TOPLEFT", 0, -((i - 1) * 30))
     row:Show()
     unread = unread + (rowChat.unread or 0)
     if row._fill and row._fill.SetColorTexture then
@@ -437,7 +508,13 @@ function G.Refresh()
     end
   end
   for i = #WowGrokDB.chats + 1, #rows do rows[i]:Hide() end
-  list:SetHeight(math.max(334, #WowGrokDB.chats * 38))
+  list:SetHeight(math.max(listScroll:GetHeight() or 200, #WowGrokDB.chats * 30))
+  if WowGrokDB.width and WowGrokDB.height and not G._sized then
+    G._sized = true
+    G._applyingSize = true
+    main:SetSize(WowGrokDB.width, WowGrokDB.height)
+    G._applyingSize = false
+  end
   placeMessages(chat)
   if state == "down" then send:SetText("Connect")
   else send:SetText("Send") end
