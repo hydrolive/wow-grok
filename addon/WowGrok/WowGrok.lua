@@ -247,6 +247,7 @@ function G.ShowPending()
   local pending = G.pending
   local strip = G.strip
   if not pending or not strip then return false end
+  G.ApplyPixelScale(strip)
   local payload = G.Payload(pending.records)
   local cells, err = WowGrok_Codec.Encode(pending.id, payload)
   if not cells then
@@ -572,6 +573,10 @@ function G.TransportTick()
       end
     end
     pending = G.pending
+    if pending and not pending.acked and not pending.warned and time() - (pending.sentAt or time()) >= 15 then
+      pending.warned = true
+      G.Note("The companion has not read this message yet. Keep the game windowed, not exclusive fullscreen.")
+    end
     if pending and not pending.acked and time() - (pending.shownAt or time()) >= 40 then
       pending.tries = (pending.tries or 0) + 1
       if pending.tries > 3 then
@@ -1024,6 +1029,11 @@ function G.Boot()
   if G.InstallChatHooks then G.InstallChatHooks() end
   G.ApplyLongchat()
   if type(WowGrok_SlotData) == "table" then G.Ingest(WowGrok_SlotData) end
+  for _, chat in ipairs(WowGrokDB.chats) do
+    if chat.working and tonumber(chat.waitingId or 0) ~= tonumber(chat.lastApplied or 0) then
+      chat.working = false
+    end
+  end
   G.ready = true
   G.EnqueueHello()
   G.Changed()
