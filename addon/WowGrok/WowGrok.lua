@@ -272,12 +272,7 @@ function G.ShowPending()
   end
   strip:Show()
   pending.shownAt = time()
-  local ack = G.SignalPath("ack", G.SlotFor(pending.id))
-  pending.ackBlind = G.signalsOk and plays(ack) or false
-  local sig = G.SignalPath("sig", G.SlotFor(pending.id))
-  pending.sigBlind = G.signalsOk and plays(sig) or false
-  local chat = G.Active()
-  if chat and chat.waitingId == pending.id then chat.sigBlind = pending.sigBlind end
+  pending.sentAt = pending.sentAt or time()
   return true
 end
 
@@ -423,6 +418,10 @@ function G.ApplyReply(reply)
   local chat = findChat(reply.chat)
   if not chat then return end
   local id = tonumber(reply.id) or 0
+  if G.pending and tonumber(G.pending.id) == id and not G.pending.acked then
+    G.pending.acked = true
+    G.HideStrip()
+  end
   local status = tostring(reply.status or "")
   if reply.cwd and reply.cwd ~= "" then chat.resolvedCwd = reply.cwd end
   if reply.session and reply.session ~= "" then chat.grokSession = reply.session end
@@ -555,14 +554,10 @@ function G.PollSlots()
     end
     return
   end
-  local anchor = pending or chat
-  local elapsed = time() - (anchor.sentAt or anchor.waitingSince or time())
-  local idx = anchor.pollIdx or 1
-  local due
-  if idx <= #G.POLL_AT then due = G.POLL_AT[idx]
-  else due = G.POLL_AT[#G.POLL_AT] + (idx - #G.POLL_AT) * 60 end
-  if elapsed >= due then
-    anchor.pollIdx = idx + 1
+  local since = (chat and chat.waitingSince) or (pending and pending.sentAt) or time()
+  local gap = (time() - since) < 20 and 2 or 10
+  if time() - (G.lastWorkPoll or 0) >= gap then
+    G.lastWorkPoll = time()
     G.LoadNextSlot()
   end
 end
@@ -570,9 +565,11 @@ end
 function G.TransportTick()
   local pending = G.pending
   if pending and not pending.acked and WowGrokDB.mode ~= "reload" then
-    local slot = G.SlotFor(pending.id)
-    if G.signalsOk and not pending.ackBlind and plays(G.SignalPath("ack", slot)) then
-      G.OnAck()
+    if not pending.ackChecked and (time() - (pending.sentAt or 0)) >= 1 then
+      pending.ackChecked = true
+      if G.signalsOk and plays(G.SignalPath("ack", G.SlotFor(pending.id))) then
+        G.OnAck()
+      end
     end
     pending = G.pending
     if pending and not pending.acked and time() - (pending.shownAt or time()) >= 40 then
@@ -587,13 +584,6 @@ function G.TransportTick()
         for _, rec in ipairs(pending.records) do rec.retry = pending.tries end
         G.ShowPending()
       end
-    end
-  end
-  local chat = G.Active()
-  if chat and chat.working and G.signalsOk and not chat.sigSeen and not chat.sigBlind then
-    if plays(G.SignalPath("sig", G.SlotFor(chat.waitingId))) then
-      chat.sigSeen = true
-      G.LoadNextSlot()
     end
   end
   if G.reloadAt and time() >= G.reloadAt and G.reloadGrab then

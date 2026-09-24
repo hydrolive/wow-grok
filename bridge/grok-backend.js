@@ -10,10 +10,32 @@ const path = require('path');
 const {
   buildApiBody,
   buildGrokArgv,
+  parseStreamLine,
   reduceStream,
   textFromResponse,
   uuid,
 } = require('./protocol');
+
+function textFromSession(cwd, sessionId) {
+  if (!cwd || !sessionId) return '';
+  const file = path.join(os.homedir(), '.grok', 'sessions', encodeURIComponent(path.resolve(cwd)), sessionId, 'updates.jsonl');
+  try {
+    const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/);
+    let text = '';
+    for (const line of lines) {
+      const ev = parseStreamLine(line);
+      const kind = ev && ev.update && ev.update.sessionUpdate;
+      if (kind === 'user_message_chunk') text = '';
+      else if (kind === 'agent_message_chunk' || kind === 'agent_message') {
+        const chunk = ev.update.content && ev.update.content.text;
+        if (chunk) text += chunk;
+      }
+    }
+    return text;
+  } catch {
+    return '';
+  }
+}
 
 function createBackend(name, opts = {}) {
   const kind = name || 'cli';
@@ -121,19 +143,30 @@ class CliBackend {
         });
       });
       const reduced = reduceStream(lines);
-      if (reduced.error) return { ...reduced, sessionId: reduced.sessionId || req.sessionId };
+      let fromSession = false;
+      if (!reduced.text) {
+        const recovered = textFromSession(req.cwd, req.resumeId || req.sessionId);
+        if (recovered) {
+          reduced.text = recovered;
+          fromSession = true;
+        }
+      }
+      const meta = { exitCode: code, stdoutLines: lines.length, stderr: stderr.trim().slice(0, 500), fromSession };
+      if (reduced.error) return { ...reduced, ...meta, sessionId: reduced.sessionId || req.sessionId };
       if (code !== 0 && !reduced.text) {
         return {
           text: '',
           sessionId: req.sessionId,
           denied: reduced.denied,
           error: (stderr || `grok exited ${code}`).trim().slice(0, 2000),
+          ...meta,
         };
       }
       return {
         text: reduced.text,
         sessionId: reduced.sessionId || req.resumeId || req.sessionId,
         denied: reduced.denied,
+        ...meta,
       };
     } finally {
       if (planned.viaFile) fs.rmSync(promptFile, { force: true });

@@ -85,9 +85,14 @@ G.cwdText = cwdText
 local minBtn = button(titleBar, "–", 22, 18)
 minBtn:SetPoint("TOPRIGHT", -6, -6)
 
+local newBtn = button(main, "New chat", 152, 22)
+newBtn:SetPoint("TOPLEFT", 8, -36)
+newBtn:RegisterForClicks("AnyUp")
+newBtn:SetScript("OnClick", function() G.NewChat("") end)
+
 local listScroll = CreateFrame("ScrollFrame", nil, main)
-listScroll:SetPoint("TOPLEFT", 8, -36)
-listScroll:SetSize(160, 360)
+listScroll:SetPoint("TOPLEFT", 8, -62)
+listScroll:SetSize(160, 334)
 local list = CreateFrame("Frame", nil, listScroll)
 list:SetSize(160, 360)
 listScroll:SetScrollChild(list)
@@ -302,13 +307,17 @@ local function takeRow(i)
   local row = rows[i]
   if row then return row end
   row = CreateFrame("Button", nil, list)
-  row:SetSize(152, 28)
+  row:SetSize(152, 36)
   paint(row, 0.12, 0.12, 0.15, 1)
   local label = row:CreateFontString(nil, "OVERLAY")
   font(label, 12, 0.9, 0.9, 0.86)
-  label:SetPoint("LEFT", 6, 0)
+  label:SetPoint("TOPLEFT", 6, -4)
   label:SetWidth(110)
   row.label = label
+  local status = row:CreateFontString(nil, "OVERLAY")
+  font(status, 10, 0.93, 0.78, 0.35)
+  status:SetPoint("BOTTOMLEFT", 6, 4)
+  row.status = status
   row:RegisterForClicks("AnyUp")
   row:SetScript("OnClick", function(self, button)
     if button == "RightButton" then G.ChatMenu(self.chatId)
@@ -415,8 +424,11 @@ function G.Refresh()
     local badge = (rowChat.unread or 0) > 0 and (" (" .. rowChat.unread .. ")") or ""
     local mark = tostring(rowChat.id) == tostring(WowGrokDB.active) and "> " or ""
     row.label:SetText(mark .. (rowChat.name or "Chat") .. badge)
+    if row.status then
+      if rowChat.working then row.status:SetText("Working") else row.status:SetText("") end
+    end
     if row.ClearAllPoints then row:ClearAllPoints() end
-    row:SetPoint("TOPLEFT", 0, -((i - 1) * 30))
+    row:SetPoint("TOPLEFT", 0, -((i - 1) * 38))
     row:Show()
     unread = unread + (rowChat.unread or 0)
     if row._fill and row._fill.SetColorTexture then
@@ -425,7 +437,7 @@ function G.Refresh()
     end
   end
   for i = #WowGrokDB.chats + 1, #rows do rows[i]:Hide() end
-  list:SetHeight(math.max(360, #WowGrokDB.chats * 30))
+  list:SetHeight(math.max(334, #WowGrokDB.chats * 38))
   placeMessages(chat)
   if state == "down" then send:SetText("Connect")
   else send:SetText("Send") end

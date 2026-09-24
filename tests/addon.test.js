@@ -66,6 +66,7 @@ test('addon codec matches the companion and a session roundtrips', () => {
     local diag = WowGrok.Diag()
     WowGrokTest.diag = diag
     WowGrokTest.sounds["Interface\\\\AddOns\\\\WowGrok\\\\ack\\\\001.wav"] = true
+    if WowGrok.pending then WowGrok.pending.sentAt = time() - 5 end
     WowGrok.TransportTick()
     WowGrok.Send("ping")
     local parts2 = {}

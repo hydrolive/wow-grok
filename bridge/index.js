@@ -301,8 +301,13 @@ function createCompanion(options = {}) {
       });
       const session = result.sessionId || sessionId;
       if (!result.error) state.sessions[key] = { id: session, cwd: resolved };
+      if (!result.error && !String(result.text || '').trim()) {
+        result.error = 'Grok finished without reply text. See bridge/companion.log.';
+      }
       const status = result.error ? 'error' : 'done';
       const text = result.error ? result.error : (result.text || '');
+      log(`grok chat ${key} #${job.id} exit=${result.exitCode} stdout=${result.stdoutLines || 0} chars=${String(result.text || '').length}${result.fromSession ? ' via session file' : ''}`);
+      if (result.stderr) log('grok stderr: ' + String(result.stderr).replace(/\s+/g, ' ').slice(0, 300));
       setResult(job, {
         status,
         text,
