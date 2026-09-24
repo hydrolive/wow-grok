@@ -1,5 +1,0 @@
-<Bindings>
-  <Binding name="WOWGROK_TOGGLE" header="WOWGROK" category="WowGrok">
-    WowGrok_Binding()
-  </Binding>
-</Bindings>

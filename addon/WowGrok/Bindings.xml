@@ -1,0 +1,5 @@
+<Bindings>
+  <Binding name="WOWGROK_TOGGLE" header="WOWGROK" category="ADDONS">
+    WowGrok_Binding()
+  </Binding>
+</Bindings>

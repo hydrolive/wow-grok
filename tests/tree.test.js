@@ -22,7 +22,7 @@ const required = [
   'addon/WowGrok/UI.lua',
   'addon/WowGrok/Slash.lua',
   'addon/WowGrok/Inbox.lua',
-  'addon/WowGrok/bindings.xml',
+  'addon/WowGrok/Bindings.xml',
   'bridge/index.js',
   'bridge/protocol.js',
   'bridge/grok-backend.js',

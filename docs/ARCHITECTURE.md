@@ -122,7 +122,7 @@ Inputs are capture lines, the SavedVariables outbox, and `--inject` for tests. M
 | `UI.lua` | Panel, bubbles, mini bar, popups |
 | `Slash.lua` | `/wow-grok`, `/grok`, `/ai`, and the `/r` hook |
 | `Inbox.lua` | Placeholder the companion overwrites |
-| `bindings.xml` | Toggle / check-reply hotkey |
+| `Bindings.xml` | Toggle hotkey. Loaded by the client, not listed in the TOC |
 
 `GameContext()` is capped at about 1200 bytes on hello and 800 bytes beside a message. It asks, each call inside `pcall`, for client, character, position, money, professions, quests, equipment, bags, group, and target. Sections drop from the end of that list until the cap fits. Shift-click into the focused WowGrok box inserts an item, spell, quest, or talent link. On send, each link becomes `[Name]` and the tooltip is appended under `--- Linked from the game ---`.
 

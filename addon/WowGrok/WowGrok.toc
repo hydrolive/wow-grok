@@ -4,7 +4,6 @@
 ## Version: 0.1.0
 ## SavedVariables: WowGrokDB
 
-bindings.xml
 Codec.lua
 Context.lua
 WowGrok.lua
