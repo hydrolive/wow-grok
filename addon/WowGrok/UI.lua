@@ -144,6 +144,7 @@ G._editLive = true
 local send = button(main, "Connect", 90, 36)
 send:SetPoint("BOTTOMRIGHT", -10, 12)
 G.sendButton = send
+send:RegisterForClicks("AnyUp")
 send:SetScript("OnClick", function() G.SubmitBox() end)
 
 function G.SubmitBox()

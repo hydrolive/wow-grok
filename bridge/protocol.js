@@ -522,6 +522,7 @@ function luaTable(globalName, records, opts = {}) {
     `\tts = ${luaString(new Date(now).toISOString())},`,
     `\tnow = ${Math.floor(now / 1000)},`,
     `\tcwd = ${luaString(opts.cwd || '')},`,
+    `\tpresence = ${Number(opts.presence) || 0},`,
     '\treplies = {',
   ];
   for (const r of records || []) {

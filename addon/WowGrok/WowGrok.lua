@@ -195,10 +195,6 @@ function G.TestSignals()
   local valid = plays(G.SignalPath("ctl", "valid"))
   G.signalsOk = (not empty) and valid
   G.presenceSeen = 0
-  if G.signalsOk then
-    G.presenceSeen = G.FindPresence()
-    if G.presenceSeen > 0 then G.presenceAt = time() end
-  end
 end
 
 function G.LinkState()
@@ -511,6 +507,7 @@ function G.Ingest(data)
   if type(data.now) == "number" and math.abs(time() - data.now) < 180 then
     G.slotHeardAt = time()
   end
+  if type(data.presence) == "number" then G.HearPresence(data.presence) end
   if type(data.cwd) == "string" and data.cwd ~= "" then G.bridgeCwd = data.cwd end
   for _, reply in ipairs(data.replies or {}) do G.ApplyReply(reply) end
   G.Changed()
@@ -528,14 +525,18 @@ function G.PollActions()
   chat.actionCount = n
 end
 
-function G.ProbePresence()
-  if not G.signalsOk then return end
-  local n = (G.presenceSeen or 0) + 1
-  if n > G.PRESENCE_MAX then return end
-  if plays(G.SignalPath("presence", n)) then
+function G.HearPresence(n)
+  n = tonumber(n)
+  if not n or n < 1 then return end
+  if G.signalsOk and n > (G.presenceSeen or 0) and n <= G.PRESENCE_MAX and plays(G.SignalPath("presence", n)) then
     G.presenceSeen = n
-    G.presenceAt = time()
   end
+  if (G.presenceSeen or 0) > 0 then G.presenceAt = time() end
+end
+
+function G.ProbePresence()
+  -- Presence files are only checked after the companion names one in a slot.
+  -- Trying an empty wav sticks as "won't play" for the rest of the client process.
 end
 
 function G.PollSlots()
@@ -544,9 +545,11 @@ function G.PollSlots()
   local pending = G.pending
   local waiting = chat and chat.working
   if not waiting and (not pending or pending.acked) then
-    if not G.signalsOk and not pending and G.ready then
-      if time() - (G.lastIdlePoll or 0) >= 600 then
+    if G.ready and G.LinkState() == "down" then
+      local waitFor = (G.idleLoads or 0) < 8 and 3 or 30
+      if time() - (G.lastIdlePoll or 0) >= waitFor then
         G.lastIdlePoll = time()
+        G.idleLoads = (G.idleLoads or 0) + 1
         G.LoadNextSlot()
       end
     end
@@ -655,13 +658,31 @@ function G.Send(text)
   G.Changed()
 end
 
+function G.Note(text)
+  local chat = G.Active()
+  if chat then
+    chat.history[#chat.history + 1] = { role = "system", id = 0, t = time(), text = text }
+  end
+  say("WowGrok: " .. tostring(text))
+  G.Changed()
+end
+
 function G.Connect()
-  if G.pending and not G.pending.acked then
-    if WowGrokDB.mode ~= "reload" then G.ShowPending() end
+  if not G.ready then
+    say("WowGrok is still loading.")
     return
   end
-  G.EnqueueHello()
-  G.Changed()
+  G.LoadNextSlot()
+  if G.LinkState() ~= "down" then
+    G.Note("Companion is connected.")
+    return
+  end
+  if G.pending and not G.pending.acked then
+    if WowGrokDB.mode ~= "reload" then G.ShowPending() end
+  else
+    G.EnqueueHello()
+  end
+  G.Note("Looking for the companion. Leave the game windowed, and run npm start in the WowGrok folder if the light stays red.")
 end
 
 function G.AllowRetry()

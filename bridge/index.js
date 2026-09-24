@@ -189,6 +189,7 @@ function createCompanion(options = {}) {
     const lua = protocol.luaTable('WowGrok_SlotData', records, {
       now: options.now || Date.now(),
       cwd: comp.defaultCwd,
+      presence: state.presence || 0,
       restore: restoreBundle(),
     });
     const slots = Number(config.slots || 200);
@@ -406,6 +407,7 @@ function createCompanion(options = {}) {
       writeFile(signalPath('presence', n), Buffer.alloc(0));
     }
     save();
+    comp.publish();
     return state.presence;
   };
 
