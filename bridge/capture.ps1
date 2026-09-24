@@ -37,11 +37,7 @@ function Emit($obj) {
   [Console]::Out.Flush()
 }
 
-function CellValue($bmp, [int]$c, [int]$r, [int]$ox, [int]$oy) {
-  $x = $ox + $c * $Cell + [int]($Cell / 2)
-  $y = $oy + $r * $Cell + [int]($Cell / 2)
-  if ($x -lt 0 -or $y -lt 0 -or $x -ge $bmp.Width -or $y -ge $bmp.Height) { return -1 }
-  $px = $bmp.GetPixel($x, $y)
+function Quant($px) {
   $v = 0
   if ($px.R -ge 128) { $v += 4 }
   if ($px.G -ge 128) { $v += 2 }
@@ -49,7 +45,38 @@ function CellValue($bmp, [int]$c, [int]$r, [int]$ox, [int]$oy) {
   return $v
 }
 
-function Decode($bmp, [int]$ox, [int]$oy) {
+function MeasurePitch($bmp) {
+  $limitY = [Math]::Min(8, $bmp.Height)
+  for ($y = 0; $y -lt $limitY; $y++) {
+    $x = 0
+    while ($x -lt 12) {
+      if ((Quant ($bmp.GetPixel($x, $y))) -ne 0) { break }
+      $x++
+    }
+    if ($x -ge 12) { continue }
+    $v = Quant ($bmp.GetPixel($x, $y))
+    $run = 0
+    while (($x + $run) -lt $bmp.Width -and $run -lt 16) {
+      if ((Quant ($bmp.GetPixel(($x + $run), $y))) -ne $v) { break }
+      $run++
+    }
+    if ($run -ge 2 -and $run -le 12) {
+      $top = $y
+      while ($top -gt 0 -and (Quant ($bmp.GetPixel($x, ($top - 1)))) -eq $v) { $top-- }
+      return @{ pitch = $run; ox = $x; oy = $top }
+    }
+  }
+  return @{ pitch = $Cell; ox = 0; oy = 0 }
+}
+
+function CellValue($bmp, [int]$c, [int]$r, [int]$pitch, [int]$ox, [int]$oy) {
+  $x = $ox + $c * $pitch + [int]($pitch / 2)
+  $y = $oy + $r * $pitch + [int]($pitch / 2)
+  if ($x -lt 0 -or $y -lt 0 -or $x -ge $bmp.Width -or $y -ge $bmp.Height) { return -1 }
+  return Quant ($bmp.GetPixel($x, $y))
+}
+
+function Decode($bmp, [int]$pitch, [int]$ox, [int]$oy) {
   $acc = 0
   $nbits = 0
   $bytes = New-Object System.Collections.Generic.List[int]
@@ -59,7 +86,7 @@ function Decode($bmp, [int]$ox, [int]$oy) {
   for ($i = 0; $i -lt $total; $i++) {
     $c = $i % $Cells
     $r = [int][Math]::Floor($i / $Cells)
-    $v = CellValue $bmp $c $r $ox $oy
+    $v = CellValue $bmp $c $r $pitch $ox $oy
     if ($v -lt 0) { break }
     $acc = $acc * 8 + $v
     $nbits += 3
@@ -96,16 +123,21 @@ function Decode($bmp, [int]$ox, [int]$oy) {
 }
 
 function DecodeAny($bmp) {
-  for ($oy = 0; $oy -lt $Cell; $oy++) {
-    for ($ox = 0; $ox -lt $Cell; $ox++) {
-      $msg = Decode $bmp $ox $oy
-      if ($msg -and -not $msg.error) {
-        $msg.ox = $ox
-        $msg.oy = $oy
-        return $msg
-      }
-      if ($msg -and $msg.error -and $ox -eq 0 -and $oy -eq 0) { $script:AlignError = $msg.error }
+  $measured = MeasurePitch $bmp
+  $script:AlignPitch = $measured.pitch
+  $tried = @{}
+  foreach ($pitch in @($measured.pitch, $Cell, ($measured.pitch - 1), ($measured.pitch + 1))) {
+    if ($pitch -lt 2 -or $pitch -gt 12 -or $tried.ContainsKey($pitch)) { continue }
+    $tried[$pitch] = $true
+    $ox = 0
+    $oy = 0
+    if ($pitch -eq $measured.pitch) { $ox = $measured.ox; $oy = $measured.oy }
+    $msg = Decode $bmp $pitch $ox $oy
+    if ($msg -and -not $msg.error) {
+      $msg.pitch = $pitch
+      return $msg
     }
+    if ($msg -and $msg.error) { $script:AlignError = "$($msg.error) pitch $pitch" }
   }
   return $null
 }
@@ -157,7 +189,7 @@ while ($true) {
       $key = "$($msg.id):$($msg.text)"
       if ($key -ne $lastKey) {
         $lastKey = $key
-        if ($msg.ox -or $msg.oy) { Emit @{ info = "strip aligned at $($msg.ox),$($msg.oy)" } }
+        if ($msg.pitch -and $msg.pitch -ne $Cell) { Emit @{ info = "strip pitch $($msg.pitch)" } }
         Emit $msg
       }
     } elseif ($script:AlignError -and ([DateTime]::Now - $lastWarn).TotalSeconds -ge 5) {

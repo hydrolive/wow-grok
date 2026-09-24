@@ -432,7 +432,19 @@ function G.ApplyReply(reply)
     return
   end
   if status ~= "done" and status ~= "error" then return end
-  if alreadyApplied(chat, id) then return end
+  if alreadyApplied(chat, id) then
+    if status == "done" and reply.text and reply.text ~= "" then
+      for _, msg in ipairs(chat.history) do
+        if tonumber(msg.id) == id and msg.role ~= "you" and type(msg.text) == "string" and msg.text:find("without reply text", 1, true) then
+          msg.role = "grok"
+          msg.text = reply.text
+          chat.working = false
+          G.Changed()
+        end
+      end
+    end
+    return
+  end
   local denied = {}
   if type(reply.denied) == "table" then
     for _, rule in ipairs(reply.denied) do

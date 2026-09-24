@@ -16,24 +16,47 @@ const {
   uuid,
 } = require('./protocol');
 
+function answerFromThought(thought) {
+  const raw = String(thought || '').trim();
+  if (!raw) return '';
+  const parts = raw.split('...');
+  const tail = parts[parts.length - 1].trim();
+  if (tail.length >= 40 && tail !== raw) return tail;
+  return '';
+}
+
 function textFromSession(cwd, sessionId) {
-  if (!cwd || !sessionId) return '';
+  const empty = { text: '', cancelled: [] };
+  if (!cwd || !sessionId) return empty;
   const file = path.join(os.homedir(), '.grok', 'sessions', encodeURIComponent(path.resolve(cwd)), sessionId, 'updates.jsonl');
   try {
     const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/);
     let text = '';
+    let thought = '';
+    const cancelled = [];
     for (const line of lines) {
       const ev = parseStreamLine(line);
-      const kind = ev && ev.update && ev.update.sessionUpdate;
-      if (kind === 'user_message_chunk') text = '';
-      else if (kind === 'agent_message_chunk' || kind === 'agent_message') {
-        const chunk = ev.update.content && ev.update.content.text;
+      const update = ev && ev.update;
+      if (!update) continue;
+      const kind = update.sessionUpdate;
+      if (kind === 'user_message_chunk') {
+        text = '';
+        thought = '';
+        cancelled.length = 0;
+      } else if (kind === 'agent_message_chunk' || kind === 'agent_message') {
+        const chunk = update.content && update.content.text;
         if (chunk) text += chunk;
+      } else if (kind === 'agent_thought_chunk') {
+        const chunk = update.content && update.content.text;
+        if (chunk) thought += chunk;
+      } else if (kind === 'tool_call_update' && String(update.status || '').toLowerCase() === 'failed') {
+        const blob = JSON.stringify(update.content || update.rawOutput || '');
+        if (/cancelled/i.test(blob)) cancelled.push(update.title || update.kind || 'tool');
       }
     }
-    return text;
+    return { text: (text.trim() || answerFromThought(thought)), cancelled };
   } catch {
-    return '';
+    return empty;
   }
 }
 
@@ -84,7 +107,7 @@ class CliBackend {
       resumeId: req.resumeId,
       newSession: req.newSession || !req.resumeId,
       rules: req.rules,
-      permissionMode: req.permissionMode,
+      permissionMode: !req.permissionMode || req.permissionMode === 'default' ? 'auto' : req.permissionMode,
       model: req.model,
       allow: req.allow,
       alwaysApprove: req.alwaysApprove === true,
@@ -144,14 +167,19 @@ class CliBackend {
       });
       const reduced = reduceStream(lines);
       let fromSession = false;
+      let cancelled = [];
       if (!reduced.text) {
         const recovered = textFromSession(req.cwd, req.resumeId || req.sessionId);
-        if (recovered) {
-          reduced.text = recovered;
+        cancelled = recovered.cancelled || [];
+        if (recovered.text) {
+          reduced.text = recovered.text;
           fromSession = true;
         }
       }
-      const meta = { exitCode: code, stdoutLines: lines.length, stderr: stderr.trim().slice(0, 500), fromSession };
+      if (!reduced.text && cancelled.length) {
+        reduced.error = 'Grok stopped before it answered. A tool was cancelled: ' + cancelled.join(', ') + '.';
+      }
+      const meta = { exitCode: code, stdoutLines: lines.length, stderr: stderr.trim().slice(0, 500), fromSession, cancelled };
       if (reduced.error) return { ...reduced, ...meta, sessionId: reduced.sessionId || req.sessionId };
       if (code !== 0 && !reduced.text) {
         return {

@@ -34,6 +34,7 @@ test('cli argv is the headless grok command and not ACP', () => {
   assert.ok(plan.argv.includes('--output-format'));
   assert.ok(plan.argv.includes('streaming-json'));
   assert.ok(!plan.argv.includes('--always-approve'));
+  assert.ok(plan.argv.includes('auto'));
   assert.ok(!plan.argv.includes('agent'));
   const long = cli.plan({
     prompt: 'y'.repeat(8000),
