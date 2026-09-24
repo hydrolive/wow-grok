@@ -137,14 +137,30 @@ function G.Changed()
   end
 end
 
+-- This client has no math.randomseed. Mix the clock into 16 hex digits instead.
+local function sessionToken()
+  local clock = tostring(time() or 0)
+  if GetTime then
+    local ok, now = pcall(GetTime)
+    if ok and type(now) == "number" then clock = clock .. tostring(now) end
+  end
+  local acc = 0
+  for i = 1, #clock do
+    acc = (acc * 33 + clock:byte(i)) % 2147483647
+  end
+  local s = {}
+  for i = 1, 16 do
+    acc = (acc * 33 + i) % 2147483647
+    s[i] = string.format("%x", acc % 16)
+  end
+  return table.concat(s)
+end
+
 function G.InitDB()
   if type(WowGrokDB) ~= "table" then WowGrokDB = {} end
   local db = WowGrokDB
   if not db.session or db.session == "" then
-    math.randomseed(time() % 2147483646)
-    local s = {}
-    for i = 1, 16 do s[i] = string.format("%x", math.random(0, 15)) end
-    db.session = table.concat(s)
+    db.session = sessionToken()
   end
   db.nextId = db.nextId or 1
   if db.contextOn == nil then db.contextOn = true end
